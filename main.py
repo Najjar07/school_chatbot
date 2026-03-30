@@ -1,7 +1,7 @@
 
 from fastapi import FastAPI
 from fastapi import UploadFile, File
-from PyPDF2 import pdfReader
+from PyPDF2 import PdfReader
 from pydantic import BaseModel
 from sqlalchemy import create_engine, Column, Integer, String, Text, ForeignKey
 from sqlalchemy.orm import sessionmaker, declarative_base
