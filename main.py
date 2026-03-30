@@ -1,3 +1,4 @@
+
 from fastapi import FastAPI
 from fastapi import UploadFile, File
 from pyPDF2 import pdfReader
@@ -7,18 +8,12 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 
 app = FastAPI()
 
-# =========================
-# 🗄️ DATABASE SETUP
-# =========================
 DATABASE_URL = "sqlite:///./school.db"
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
-# =========================
-# 📚 MODELS
-# =========================
 class Teacher(Base):
     __tablename__ = "teachers"
 
@@ -176,8 +171,10 @@ def chat(request: ChatRequest):
     }
 
 # =========================
-# 🏠 HOME
+# 🏠 Home
 # =========================
 @app.get("/")
 def home():
     return {"message": "Full chatbot system is running 🚀"}
+
+
