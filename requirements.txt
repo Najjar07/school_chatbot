@@ -2,4 +2,4 @@ fastapi
 uvicorn
 sqlalchemy
 pydantic
-pyPDF2
+PyPDF2
