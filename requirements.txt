@@ -3,3 +3,4 @@ uvicorn
 sqlalchemy
 pydantic
 PyPDF2
+python-multipart
