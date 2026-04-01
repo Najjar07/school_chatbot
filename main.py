@@ -117,7 +117,8 @@ def upload_pdf(file: UploadFile = File(...)):
         full_text += text + "\n"
         #full_text += page.extract_text() + "\n"
 
-    chunks = full_text.split("\n")
+    #chunks = full_text.split("\n")
+    chunks = full_text.split(". ")
 
     saved_chunks = 0
 
@@ -125,9 +126,13 @@ def upload_pdf(file: UploadFile = File(...)):
         chunk = chunk.strip()
 
     # Skip short text
-        if len(chunk) < 50:
+        if len(chunk) < 20:
             continue
+        #if len(chunk) < 50:
+           # continue
         if not chunk:
+            continue
+        if "module" in text or "page" in text:
             continue
 
     # Skip unwanted content
