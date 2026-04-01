@@ -112,7 +112,10 @@ def upload_pdf(file: UploadFile = File(...)):
     full_text = ""
 
     for page in reader.pages:
-        full_text += page.extract_text() + "\n"
+        text = page.extract_text()
+    if text:
+        full_text += text + "\n"
+        #full_text += page.extract_text() + "\n"
 
     chunks = full_text.split("\n")
 
@@ -123,6 +126,8 @@ def upload_pdf(file: UploadFile = File(...)):
 
     # Skip short text
         if len(chunk) < 50:
+            continue
+        if not chunk:
             continue
 
     # Skip unwanted content
@@ -176,12 +181,15 @@ def chat(request: ChatRequest):
 # 🚀 only return strong matches
     if best_match and best_score >= 2:
         db.close()
-        return {"response": best_match.content}
+        return {"response": best_match.content or "No valid content found"}
+        #return {"response": best_match.content}
 
         db.close()
         return {
         "response": "Sorry, I don’t have information on that topic yet."
     }
+
+    print(len(results))
 
 # =========================
 # 🏠 Home
