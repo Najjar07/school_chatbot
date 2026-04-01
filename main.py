@@ -121,19 +121,25 @@ def upload_pdf(file: UploadFile = File(...)):
     for chunk in chunks:
         chunk = chunk.strip()
 
+    # Skip short text
         if len(chunk) < 50:
             continue
 
-        new_entry = Knowledge(
-            subject="general",
-            topic="pdf_content",
-            content=chunk,
-            keywords=",".join(chunk.lower().split()[:5]),
-            teacher_id=1
-        )
+    # Skip unwanted content
+        text = chunk.lower()
+        if "module" in text or "page" in text:
+            continue
 
-        db.add(new_entry)
-        saved_chunks += 1
+    new_entry = Knowledge(
+        subject="general",
+        topic="pdf_content",
+        content=chunk,
+        keywords=",".join(text.split()[:5]),
+        teacher_id=1
+    )
+
+    db.add(new_entry)
+    saved_chunks += 1
 
     db.commit()
     db.close()
@@ -151,22 +157,29 @@ def chat(request: ChatRequest):
 
     results = db.query(Knowledge).all()
 
+    best_match = None
+    best_score = 0
+
     for item in results:
         keyword_list = item.keywords.split(",")
 
-        # Match topic
-        if item.topic in user_msg:
-            db.close()
-            return {"response": item.content}
+    score = 0
+    for word in keyword_list:
+        if word in user_msg:
+            score += 1
 
-        # Match keywords
-        for word in keyword_list:
-            if word in user_msg:
-                db.close()
-                return {"response": item.content}
+    # 🎯 pick the best match (not first match)
+    if score > best_score:
+        best_score = score
+        best_match = item
 
-    db.close()
-    return {
+# 🚀 only return strong matches
+    if best_match and best_score >= 2:
+        db.close()
+        return {"response": best_match.content}
+
+        db.close()
+        return {
         "response": "Sorry, I don’t have information on that topic yet."
     }
 
