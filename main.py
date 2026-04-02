@@ -120,7 +120,15 @@ def upload_pdf(file: UploadFile = File(...)):
 
     #chunks = full_text.split("\n")
     #chunks = full_text.split(". ")
-    chunks = re.split(r'\n\s*\n', full_text)  # split by paragraphs
+    #chunks = re.split(r'\n\s*\n', full_text)  # split by paragraphs
+    chunks = []
+    words = full_text.split()
+
+    chunk_size = 100
+
+    for i in range(0, len(words), chunk_size):
+        chunk = " ".join(words[i:i+chunk_size])
+        chunks.append(chunk)
 
     saved_chunks = 0
 
