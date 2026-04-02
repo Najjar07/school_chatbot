@@ -1,30 +1,29 @@
 
-from fastapi import FastAPI
-from fastapi import UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException
 from PyPDF2 import PdfReader
 from pydantic import BaseModel
 from sqlalchemy import create_engine, Column, Integer, String, Text, ForeignKey
-from sqlalchemy.orm import sessionmaker, declarative_base
-import re
+from sqlalchemy.orm import sessionmaker, declarative_base, Session
 
 app = FastAPI()
 
+# =========================
+# 🗄️ DATABASE SETUP
+# =========================
 DATABASE_URL = "sqlite:///./school.db"
-
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
+
 class Teacher(Base):
     __tablename__ = "teachers"
-
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True)
 
 
 class Knowledge(Base):
     __tablename__ = "knowledge"
-
     id = Column(Integer, primary_key=True, index=True)
     subject = Column(String)
     topic = Column(String)
@@ -32,14 +31,27 @@ class Knowledge(Base):
     keywords = Column(Text)
     teacher_id = Column(Integer, ForeignKey("teachers.id"))
 
-# Create tables
+
 Base.metadata.create_all(bind=engine)
+
+
+# =========================
+# 🔌 DB DEPENDENCY
+# =========================
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 
 # =========================
 # 📥 REQUEST MODELS
 # =========================
 class TeacherLogin(BaseModel):
     email: str
+
 
 class UploadRequest(BaseModel):
     teacher_email: str
@@ -48,16 +60,17 @@ class UploadRequest(BaseModel):
     content: str
     keywords: list[str]
 
+
 class ChatRequest(BaseModel):
     message: str
+    subject: str | None = None  # optional subject filter
+
 
 # =========================
 # 🔐 TEACHER LOGIN
 # =========================
 @app.post("/teacher/login")
-def login(data: TeacherLogin):
-    db = SessionLocal()
-
+def login(data: TeacherLogin, db: Session = Depends(get_db)):
     teacher = db.query(Teacher).filter(Teacher.email == data.email).first()
 
     if not teacher:
@@ -66,27 +79,23 @@ def login(data: TeacherLogin):
         db.commit()
         db.refresh(teacher)
 
-    db.close()
-
     return {
         "message": "Login successful",
         "teacher_id": teacher.id
     }
 
+
 # =========================
 # 📚 TEACHER UPLOAD
 # =========================
 @app.post("/teacher/upload")
-def upload_data(data: UploadRequest):
-    db = SessionLocal()
-
+def upload_data(data: UploadRequest, db: Session = Depends(get_db)):
     teacher = db.query(Teacher).filter(Teacher.email == data.teacher_email).first()
 
     if not teacher:
-        db.close()
-        return {"error": "Teacher not found. Please login first."}
+        raise HTTPException(status_code=404, detail="Teacher not found. Please login first.")
 
-    keywords_str = ",".join([k.lower() for k in data.keywords])
+    keywords_str = ",".join([k.lower().strip() for k in data.keywords])
 
     new_entry = Knowledge(
         subject=data.subject.lower(),
@@ -98,40 +107,48 @@ def upload_data(data: UploadRequest):
 
     db.add(new_entry)
     db.commit()
-    db.close()
 
     return {"message": "Content uploaded successfully"}
 
+
 # =========================
-# 📄 PDF UPLOAD
+# 📄 PDF UPLOAD  (BUG FIXED)
 # =========================
 @app.post("/teacher/upload-pdf")
-def upload_pdf(file: UploadFile = File(...)):
-    db = SessionLocal()
+def upload_pdf(
+    file: UploadFile = File(...),
+    teacher_email: str = Form(...),       # FIX: accept teacher email, not hardcoded ID
+    subject: str = Form(default="general"),
+    topic: str = Form(default="pdf_content"),
+    db: Session = Depends(get_db)
+):
+    # Validate teacher
+    teacher = db.query(Teacher).filter(Teacher.email == teacher_email).first()
+    if not teacher:
+        raise HTTPException(status_code=404, detail="Teacher not found. Please login first.")
 
+    # Extract text from PDF
     reader = PdfReader(file.file)
     full_text = ""
-
     for page in reader.pages:
         text = page.extract_text()
         if text:
             full_text += text + "\n"
-        #full_text += page.extract_text() + "\n"
 
-    #chunks = full_text.split("\n")
-    #chunks = full_text.split(". ")
-    #chunks = re.split(r'\n\s*\n', full_text)  # split by paragraphs
-    chunks = []
+    if not full_text.strip():
+        raise HTTPException(status_code=400, detail="Could not extract text from PDF.")
+
+    # Split into word chunks
     words = full_text.split()
-
     chunk_size = 100
-
-    for i in range(0, len(words), chunk_size):
-        chunk = " ".join(words[i:i+chunk_size])
-        chunks.append(chunk)
+    chunks = [
+        " ".join(words[i:i + chunk_size])
+        for i in range(0, len(words), chunk_size)
+    ]
 
     saved_chunks = 0
 
+    # FIX: new_entry creation is now INSIDE the loop
     for chunk in chunks:
         chunk = chunk.strip()
 
@@ -140,62 +157,85 @@ def upload_pdf(file: UploadFile = File(...)):
 
         text = chunk.lower()
 
+        # Skip boilerplate lines
         if "module" in text or "page" in text:
             continue
 
-    new_entry = Knowledge(
-        subject="general",
-        topic="pdf_content",
-        content=chunk,
-        keywords=",".join(text.split()[:5]),
-        teacher_id=1
-    )
-
-    db.add(new_entry)
-    saved_chunks += 1
+        new_entry = Knowledge(
+            subject=subject.lower(),
+            topic=topic.lower(),
+            content=chunk,
+            keywords=",".join(text.split()[:5]),
+            teacher_id=teacher.id          # FIX: use real teacher ID
+        )
+        db.add(new_entry)
+        saved_chunks += 1                  # FIX: increment inside loop
 
     db.commit()
-    db.close()
 
-    return {
-        "message": f"{saved_chunks} chunks saved successfully"
-    }
+    return {"message": f"{saved_chunks} chunks saved successfully"}
+
+
 # =========================
-# 🎓 STUDENT CHATBOT
+# 🎓 STUDENT CHATBOT  (IMPROVED MATCHING)
 # =========================
 @app.post("/chat/learning")
-def chat(request: ChatRequest):
-    db = SessionLocal()
+def chat(request: ChatRequest, db: Session = Depends(get_db)):
     user_msg = request.message.lower()
+    user_words = set(user_msg.split())
 
-    results = db.query(Knowledge).all()
+    # Optionally filter by subject
+    query = db.query(Knowledge)
+    if request.subject:
+        query = query.filter(Knowledge.subject == request.subject.lower())
+
+    results = query.all()
+
+    if not results:
+        return {"response": "Sorry, I don't have information on that topic yet."}
 
     best_match = None
     best_score = 0
 
     for item in results:
-        keyword_list = item.keywords.split(",")
+        keyword_list = [k.strip() for k in item.keywords.split(",") if k.strip()]
+        topic_words = set(item.topic.split("_"))
 
         score = 0
+
+        # Score: keyword hits
         for word in keyword_list:
-            if word in user_msg:
+            if word in user_words:
+                score += 2          # exact keyword match = higher weight
+
+        # Score: topic word hits
+        for word in topic_words:
+            if word in user_words:
                 score += 1
+
+        # Score: subject match bonus
+        if request.subject and item.subject == request.subject.lower():
+            score += 1
 
         if score > best_score:
             best_score = score
             best_match = item
 
-    if best_match:
-        db.close()
-        return {"response": best_match.content or "No valid content found"}
+    # Only respond if there's at least one keyword match
+    if best_match and best_score > 0:
+        return {
+            "response": best_match.content,
+            "matched_topic": best_match.topic,
+            "matched_subject": best_match.subject,
+            "confidence_score": best_score
+        }
 
-    db.close()
     return {"response": "Sorry, I don't have information on that topic yet."}
+
+
 # =========================
-# 🏠 Home
+# 🏠 HOME
 # =========================
 @app.get("/")
 def home():
-    return {"message": "Full chatbot system is running 🚀"}
-
-
+    return {"message": "School Chatbot API is running 🚀"}
