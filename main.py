@@ -5,6 +5,7 @@ from PyPDF2 import PdfReader
 from pydantic import BaseModel
 from sqlalchemy import create_engine, Column, Integer, String, Text, ForeignKey
 from sqlalchemy.orm import sessionmaker, declarative_base
+import re
 
 app = FastAPI()
 
@@ -118,11 +119,8 @@ def upload_pdf(file: UploadFile = File(...)):
         #full_text += page.extract_text() + "\n"
 
     #chunks = full_text.split("\n")
-    chunks = full_text.split(". ")
-
-    saved_chunks = 0
-
-    chunks = full_text.split(". ")
+    #chunks = full_text.split(". ")
+    chunks = re.split(r'\n\s*\n', full_text)  # split by paragraphs
 
     saved_chunks = 0
 
