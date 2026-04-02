@@ -129,13 +129,13 @@ def upload_pdf(file: UploadFile = File(...)):
     for chunk in chunks:
         chunk = chunk.strip()
 
-    if len(chunk) < 20:
-        continue
+        if len(chunk) < 20:
+            continue
 
-    text = chunk.lower()
+        text = chunk.lower()
 
-    if "module" in text or "page" in text:
-        continue
+        if "module" in text or "page" in text:
+            continue
 
     new_entry = Knowledge(
         subject="general",
