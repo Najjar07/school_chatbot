@@ -113,8 +113,8 @@ def upload_pdf(file: UploadFile = File(...)):
 
     for page in reader.pages:
         text = page.extract_text()
-    if text:
-        full_text += text + "\n"
+        if text:
+            full_text += text + "\n"
         #full_text += page.extract_text() + "\n"
 
     #chunks = full_text.split("\n")
@@ -122,23 +122,20 @@ def upload_pdf(file: UploadFile = File(...)):
 
     saved_chunks = 0
 
+    chunks = full_text.split(". ")
+
+    saved_chunks = 0
+
     for chunk in chunks:
         chunk = chunk.strip()
 
-    # Skip short text
-        if len(chunk) < 20:
-            continue
-        #if len(chunk) < 50:
-           # continue
-        if not chunk:
-            continue
-        if "module" in text or "page" in text:
-            continue
+    if len(chunk) < 20:
+        continue
 
-    # Skip unwanted content
-        text = chunk.lower()
-        if "module" in text or "page" in text:
-            continue
+    text = chunk.lower()
+
+    if "module" in text or "page" in text:
+        continue
 
     new_entry = Knowledge(
         subject="general",
@@ -173,29 +170,21 @@ def chat(request: ChatRequest):
     for item in results:
         keyword_list = item.keywords.split(",")
 
-    score = 0
-    for word in keyword_list:
-        if word in user_msg:
-            score += 1
+        score = 0
+        for word in keyword_list:
+            if word in user_msg:
+                score += 1
 
-    # 🎯 pick the best match (not first match)
-    if score > best_score:
-        best_score = score
-        best_match = item
+        if score > best_score:
+            best_score = score
+            best_match = item
 
-# 🚀 only return strong matches
-    if best_match and best_score >= 2:
+    if best_match:
         db.close()
         return {"response": best_match.content or "No valid content found"}
-        #return {"response": best_match.content}
 
-        db.close()
-        return {
-        "response": "Sorry, I don’t have information on that topic yet."
-    }
-
-    print(len(results))
-
+    db.close()
+    return {"response": "Sorry, I don't have information on that topic yet."}
 # =========================
 # 🏠 Home
 # =========================
