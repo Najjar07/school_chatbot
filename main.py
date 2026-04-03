@@ -5,6 +5,8 @@ from pydantic import BaseModel
 from sqlalchemy import create_engine, Column, Integer, String, Text, ForeignKey
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
 
+STOPWORDS = {"the", "and", "of", "in", "a", "an", "is", "it", "to", "for", "on", "at", "by", "with", "this", "that", "are", "was", "be", "as", "or"}
+
 app = FastAPI()
 
 # =========================
@@ -160,12 +162,15 @@ def upload_pdf(
         # Skip boilerplate lines
         if "module" in text or "page" in text:
             continue
+        
+        meaningful_words = [w for w in text.split() if w not in STOPWORDS]  
+
 
         new_entry = Knowledge(
             subject=subject.lower(),
             topic=topic.lower(),
             content=chunk,
-            keywords=",".join(text.split()[:5]),
+            keywords=",".join(meaningful_words[:5]),
             teacher_id=teacher.id          # FIX: use real teacher ID
         )
         db.add(new_entry)
@@ -239,3 +244,10 @@ def chat(request: ChatRequest, db: Session = Depends(get_db)):
 @app.get("/")
 def home():
     return {"message": "School Chatbot API is running 🚀"}
+
+
+@app.delete("/admin/clear-knowledge")
+def clear_knowledge(db: Session = Depends(get_db)):
+    db.query(Knowledge).delete()
+    db.commit()
+    return {"message": "All knowledge entries deleted"}
