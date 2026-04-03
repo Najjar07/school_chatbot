@@ -170,7 +170,7 @@ def upload_pdf(
             subject=subject.lower(),
             topic=topic.lower(),
             content=chunk,
-            keywords=",".join(meaningful_words[:5]),
+            keywords=",".join(meaningful_words[:15]),
             teacher_id=teacher.id          # FIX: use real teacher ID
         )
         db.add(new_entry)
@@ -211,7 +211,9 @@ def chat(request: ChatRequest, db: Session = Depends(get_db)):
         # Score: keyword hits
         for word in keyword_list:
             if word in user_words:
-                score += 2          # exact keyword match = higher weight
+                score += 2
+            elif any(word in uw or uw in word for uw in user_words):
+                score += 1          # exact keyword match = higher weight
 
         # Score: topic word hits
         for word in topic_words:
